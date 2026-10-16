@@ -165,7 +165,32 @@
     letter-spacing:.22em;
     text-transform:uppercase;
     cursor:pointer;
-    transition:border-color .18s ease, color .18s ease;
+    transition:border-color .18s ease, color .18s ease, background .18s ease;
+  }
+
+  .eq{
+    display:inline-flex;
+    align-items:flex-end;
+    gap:2px;
+    height:10px;
+    width:12px;
+  }
+  .eq i{
+    display:block;
+    width:2px;
+    height:3px;
+    background:rgba(233,220,195,.4);
+    transform-origin:bottom;
+  }
+  .snd[aria-pressed="true"] .eq i{
+    background:var(--rust);
+    animation:eq 900ms ease-in-out infinite;
+  }
+  .snd[aria-pressed="true"] .eq i:nth-child(2){animation-delay:140ms}
+  .snd[aria-pressed="true"] .eq i:nth-child(3){animation-delay:280ms}
+  @keyframes eq{
+    0%,100%{height:3px}
+    50%{height:10px}
   }
 
   .snd:hover{border-color:var(--rust);color:var(--cream)}
@@ -275,11 +300,59 @@
 
   ::selection{background:var(--rust);color:var(--ink)}
 
+  .stamp{
+    position:absolute;
+    z-index:8;
+    left:42%;
+    top:22%;
+    font-family:var(--display);
+    font-size:clamp(2.8rem,9vw,6.2rem);
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--rust);
+    border:5px solid var(--rust);
+    padding:.08em .22em .02em;
+    transform:rotate(-18deg);
+    opacity:0;
+    pointer-events:none;
+    mix-blend-mode:screen;
+    transition:opacity .7s cubic-bezier(.22,1,.36,1);
+  }
+  .stage[data-hours="closed"] .stamp{
+    opacity:.78;
+  }
+  .stage[data-hours="closed"] .plate{
+    filter:saturate(.7) brightness(.72);
+  }
+  .stage[data-hours="closed"] .stat b{color:var(--rust)}
+
   .slip{
     min-width:0;
-    border:1px solid rgba(233,220,195,.22);
-    background:rgba(11,20,24,.58);
-    padding:14px 14px 12px;
+    position:relative;
+    border:1px solid rgba(233,220,195,.28);
+    background:
+      linear-gradient(180deg, rgba(233,220,195,.07), transparent 18px),
+      rgba(11,20,24,.72);
+    box-shadow:0 22px 48px rgba(0,0,0,.48), 0 1px 0 rgba(233,220,195,.12) inset;
+    padding:18px 16px 14px;
+    transform-origin:top right;
+  }
+  .stage.is-punch .slip{
+    animation:punch 520ms cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes punch{
+    0%{transform:scale(1)}
+    28%{transform:scale(1.03) translateX(-3px);filter:contrast(1.35) saturate(.55)}
+    100%{transform:none;filter:none}
+  }
+  .perf{
+    position:absolute;
+    left:0;right:0;top:-1px;
+    height:10px;
+    background:radial-gradient(circle at 8px 0, transparent 5px, rgba(233,220,195,.2) 5.5px) repeat-x;
+    background-size:16px 10px;
+    opacity:.7;
+    pointer-events:none;
   }
 
   .slip-head{
@@ -438,21 +511,25 @@
   }
 
   .shelf button{
-    border:1px solid rgba(233,220,195,.2);
-    background:transparent;
-    color:rgba(233,220,195,.78);
+    border:1px solid rgba(233,220,195,.18);
+    border-left:3px solid var(--rust);
+    background:rgba(20,38,44,.55);
+    color:rgba(233,220,195,.88);
     font:inherit;
     font-size:10px;
     letter-spacing:.08em;
     text-transform:uppercase;
-    padding:5px 8px;
+    padding:7px 10px 7px 9px;
     cursor:pointer;
-    transition:border-color .16s ease, color .16s ease, background .16s ease;
+    box-shadow:0 8px 16px rgba(0,0,0,.22);
+    transition:border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease;
   }
 
   .shelf button:hover{
     border-color:var(--rust);
     color:var(--cream);
+    background:rgba(194,97,43,.18);
+    transform:translateY(-1px);
   }
 
   .shelf button:focus-visible{outline:2px solid var(--crt);outline-offset:2px}
@@ -525,7 +602,7 @@
   }
 
   @media (prefers-reduced-motion:reduce){
-    .grain,.track,.title::before,.title::after{animation:none}
+    .grain,.track,.title::before,.title::after,.snd[aria-pressed="true"] .eq i,.stage.is-punch .slip{animation:none}
     .track{opacity:0}
   }
 </style>
@@ -543,7 +620,8 @@
     <span class="mark">&#9613; Rewind Video</span>
     <span class="right">
       <button class="snd" id="snd" type="button" aria-pressed="false">
-        <span class="dot" aria-hidden="true"></span><span id="sndLabel">Sound off</span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span id="sndLabel">Sound off</span>
       </button>
       <span class="stat" id="stat">&mdash;</span>
     </span>
@@ -558,7 +636,10 @@
       <p class="sub">The counter is unattended, the fluorescents are half out, and the tape in the deck is still running. Come in, take your time, put it back where you found it.</p>
     </main>
 
+    <p class="stamp" id="stamp" hidden>Closed</p>
+
     <section class="slip" aria-labelledby="slip-heading">
+      <div class="perf" aria-hidden="true"></div>
       <header class="slip-head">
         <h2 id="slip-heading">Out</h2>
         <p class="slip-meta" id="slip-meta">Nothing out</p>
@@ -595,13 +676,18 @@
       var target = new Date(now);
       var label;
 
-      if (h >= OPEN && h < CLOSE) {
+      var openNow = h >= OPEN && h < CLOSE;
+      var stage = document.querySelector('.stage');
+      var stamp = document.getElementById('stamp');
+      if (stage) stage.setAttribute('data-hours', openNow ? 'open' : 'closed');
+      if (stamp) stamp.hidden = openNow;
+      if (openNow) {
         target.setHours(CLOSE, 0, 0, 0);
         label = 'Closing in';
       } else {
         target.setHours(OPEN, 0, 0, 0);
         if (h >= CLOSE) target.setDate(target.getDate() + 1);
-        label = 'Opening in';
+        label = 'Opens in';
       }
 
       var diff = Math.max(0, target - now);
@@ -770,6 +856,13 @@
       input.value = '';
       render();
       say(title + ' · ' + dueLabel(items[0].dueAt));
+      var stage = document.querySelector('.stage');
+      if (stage) {
+        stage.classList.remove('is-punch');
+        void stage.offsetWidth;
+        stage.classList.add('is-punch');
+        setTimeout(function () { stage.classList.remove('is-punch'); }, 560);
+      }
     }
 
     function rewind(index) {
